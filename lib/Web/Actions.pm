@@ -4,6 +4,7 @@ package Web::Actions;
 use Carp qw( confess );
 use Scalar::Util qw( blessed );
 use Web::Actions::Util qw( lazy_require lazy_new );
+use Safe::Isa;
 
 use namespace::clean;
 
@@ -11,7 +12,7 @@ our $VERSION = '0.000001'; # 0.0.1
 $VERSION = eval $VERSION;
 
 use Exporter 'import';
-our @EXPORT = qw( actions handle root under );
+our @EXPORT = qw( webactions handle root under view error );
 
 my $_to_path_obj = sub {
     my ($str) = @_;
@@ -32,6 +33,16 @@ my $_to_action_obj = sub {
         defined($spec) ? $spec : 'undef';
 };
 
+sub error {
+    my ($code, $handler) = @_;
+    return lazy_new('Catcher', code => $code, handler => $handler);
+}
+
+sub view {
+    my ($name, $handler) = @_;
+    return lazy_new('View', name => $name, handler => $handler);
+}
+
 sub under {
     my ($path, @actions) = @_;
     return lazy_new('Group',
@@ -40,8 +51,12 @@ sub under {
     );
 }
 
-sub actions {
-    return lazy_new('App', actions => [@_]);
+sub webactions {
+    my @actions;
+    my @views;
+    push @{ $_->$_isa('Web::Actions::View') ? \@views : \@actions }, $_
+        for @_;
+    return lazy_new('App', actions => \@actions, views => \@views);
 }
 
 sub root {

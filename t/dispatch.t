@@ -8,11 +8,19 @@ use lib "$FindBin::Bin/lib";
 
 my $_prefix = 'http://localhost';
 
-my $app = actions(
-    handle('foo', GET => 'TestAction::Simple'),
+my $app = webactions(
+    view(raw => sub {
+        my $res = shift;
+        return [200, ['Content-Type', 'text/html'], [$res]];
+    }),
+    handle('foo', GET => {
+        class => 'TestAction::Simple',
+        view => { ok => 'raw' },
+    }),
     under('bar',
         handle('baz', GET => {
             class => 'TestAction::Simple',
+            view => { ok => 'raw' },
             static => {
                 text => 'in bar then baz',
             },
@@ -21,6 +29,7 @@ my $app = actions(
     under('multi/level',
         handle('dispatch/test', GET => {
             class => 'TestAction::Simple',
+            view => { ok => 'raw' },
             static => {
                 text => 'multi level testing',
             },
@@ -29,21 +38,25 @@ my $app = actions(
     under('cap-all',
         handle('any/:rest*', GET => {
             class => 'TestAction::Simple',
+            view => { ok => 'raw' },
             call => 'run_rest',
         }),
         under('min',
             handle(':rest[2+]', GET => {
                 class => 'TestAction::Simple',
+                view => { ok => 'raw' },
                 static => { prefix => 'more ' },
                 call => 'run_rest',
             }),
             handle(':rest+', GET => {
                 class => 'TestAction::Simple',
+                view => { ok => 'raw' },
                 static => { prefix => 'many ' },
                 call => 'run_rest',
             }),
             handle(':rest*', GET => {
                 class => 'TestAction::Simple',
+                view => { ok => 'raw' },
                 static => { prefix => 'any ' },
                 call => 'run_rest',
             }),
@@ -51,23 +64,54 @@ my $app = actions(
     ),
     handle('cap/:capture', GET => {
         class => 'TestAction::Simple',
+        view => { ok => 'raw' },
         call => 'run_capture',
     }),
     under('multi/cap/:capture',
         handle(':capture2/:capture3', GET => {
             class => 'TestAction::Simple',
+            view => { ok => 'raw' },
             call => 'run_all_captures',
         }),
     ),
     root(GET => {
         class => 'TestAction::Simple',
+        view => { ok => 'raw' },
         call => 'run_root',
     }),
 )->to_psgi;
 
+my $_wrap = sub {
+    my ($path, $code) = @_;
+    return sub {
+        my @args = @_;
+        subtest "path: $path", sub {
+            $code->(@args);
+            done_testing;
+        };
+    };
+};
+
 sub GET {
     my ($path, $code) = @_;
-    return [HTTP::Request->new(GET => $_prefix . $path), $code];
+    return [
+        HTTP::Request->new(GET => $_prefix . $path),
+        $_wrap->($path, $code),
+    ];
+}
+
+sub OPTIONS {
+    my ($path, @opt) = @_;
+    return [
+        HTTP::Request->new(OPTIONS => $_prefix . $path),
+        $_wrap->($path, sub {
+            my $res = shift;
+            is_deeply
+                [sort split m{\s*,\s*}, $res->header('Allow')],
+                [sort(@opt, 'OPTIONS')],
+                'available options';
+        }),
+    ];
 }
 
 sub requests {
@@ -92,6 +136,7 @@ test_psgi(
             my $res = shift;
             like $res->content, qr{Root\s+Result}, 'root result';
         }),
+        OPTIONS('/', 'GET'),
         GET('/bar/baz', sub {
             my $res = shift;
             like $res->content, qr{in bar then baz}, 'deeper level';

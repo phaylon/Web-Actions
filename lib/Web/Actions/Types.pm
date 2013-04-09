@@ -19,6 +19,7 @@ our @EXPORT_OK = qw(
     PathPartStr
     InstanceOf
     ClassName
+    CodeRef
 );
 
 my $_role_type = sub {
@@ -69,6 +70,11 @@ my $_tc_class_name = sub {
         if $_[0] =~ m{\s};
 };
 
+my $_tc_code_ref = sub {
+    die "Not a code reference\n"
+        unless ref($_[0]) eq 'CODE';
+};
+
 sub Dispatching { $_tc_dispatching }
 sub Responding { $_tc_responding }
 sub PathMatching { $_tc_path_matching }
@@ -76,6 +82,7 @@ sub HTTPMethod { $_tc_http_method }
 sub Str { $_tc_str }
 sub PathPartStr { $_tc_str }
 sub ClassName { $_tc_class_name }
+sub CodeRef { $_tc_code_ref }
 
 sub InstanceOf {
     my ($class) = @_;

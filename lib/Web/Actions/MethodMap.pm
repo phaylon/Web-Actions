@@ -4,6 +4,7 @@ package Web::Actions::MethodMap;
 use Moo;
 use Web::Actions::Types qw( HTTPMethod Responding Map InstanceOf );
 use Web::Actions::Util qw( lazy_new );
+use HTTP::Throwable::Factory qw( http_throw );
 
 use namespace::clean;
 
@@ -39,18 +40,20 @@ sub dispatcher {
         if (my $extract = $path_matcher->($path)) {
             my $method = uc($req->method);
             if ($method eq 'OPTIONS') {
-                return [200, [
+                return [__psgi => [200, [
                     'Allow' => join(', ',
                         'OPTIONS',
                         keys %method_map,
                     ),
-                ], []];
+                ], []]];
             }
             elsif (my $responder = $method_map{$method}) {
                 return $responder->($req, %$collected, %$extract);
             }
             else {
-                return [405, [], []];
+                http_throw(MethodNotAllowed => {
+                    message => 'Invalid request method',
+                });
             }
         }
         return undef;

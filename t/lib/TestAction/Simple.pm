@@ -14,36 +14,33 @@ has prefix => (is => 'ro');
 
 sub run {
     my ($self) = @_;
-    return [200, [], [$self->text || 'Foo Result']];
+    return $self->text || 'Foo Result';
 }
 
 sub run_root {
     my ($self) = @_;
-    return [200, [], ['Root Result']];
+    return 'Root Result';
 }
 
 sub run_capture {
     my ($self) = @_;
-    return [200, [], ['capture ' . $self->capture]];
+    return 'capture ' . $self->capture;
 }
 
 sub run_all_captures {
     my ($self) = @_;
-    return [200, [], [
+    return
         'capture ' . join ' ',
             $self->capture,
             $self->capture2,
-            $self->capture3,
-    ]];
+            $self->capture3;
 }
 
 sub run_rest {
     my ($self) = @_;
-    return [200, [], [
-        'rest '
-        . ($self->prefix || '')
-        . join ' ', @{ $self->rest },
-    ]];
+    return sprintf 'rest %s%s',
+        $self->prefix || '',
+        join ' ', @{ $self->rest };
 }
 
 1;
