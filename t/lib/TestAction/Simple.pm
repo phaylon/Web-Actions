@@ -11,10 +11,21 @@ has capture2 => (is => 'ro');
 has capture3 => (is => 'ro');
 has rest => (is => 'ro');
 has prefix => (is => 'ro');
+has param1 => (is => 'ro');
+has param2 => (is => 'ro');
 
 sub run {
     my ($self) = @_;
     return $self->text || 'Foo Result';
+}
+
+sub run_params {
+    my ($self) = @_;
+    return join ' ', map {
+        my $method = $_;
+        my $value = $self->$method;
+        join '=', $method, ref($value) ? '@'.join(',', @$value) : $value;
+    } grep { defined $self->$_ } qw( param1 param2 );
 }
 
 sub run_root {

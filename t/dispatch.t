@@ -3,6 +3,7 @@ use Web::Actions;
 use Plack::Test;
 use HTTP::Request;
 use FindBin;
+use HTTP::Request::Common ();
 
 use lib "$FindBin::Bin/lib";
 
@@ -13,10 +14,68 @@ my $app = webactions(
         my $res = shift;
         return [200, ['Content-Type', 'text/html'], [$res]];
     }),
+    except('Web::Actions::Status', sub {
+        my $err = shift;
+        return [
+            $err->code,
+            ['Content-Type', 'text/html'],
+            [$err->message],
+        ];
+    }),
     handle('foo', GET => {
         class => 'TestAction::Simple',
         view => { ok => 'raw' },
     }),
+    under('param',
+        handle('query', GET => {
+            class => 'TestAction::Simple',
+            view => { ok => 'raw' },
+            call => 'run_params',
+            query_params => {
+                'param1' => 'foo',
+            },
+        }),
+        handle('query_req', GET => {
+            class => 'TestAction::Simple',
+            view => { ok => 'raw' },
+            call => 'run_params',
+            query_params => {
+                'param1' => '!foo',
+            },
+        }),
+        handle('query_list', GET => {
+            class => 'TestAction::Simple',
+            view => { ok => 'raw' },
+            call => 'run_params',
+            query_params => {
+                'param1' => '@foo',
+            },
+        }),
+        handle('body', POST => {
+            class => 'TestAction::Simple',
+            view => { ok => 'raw' },
+            call => 'run_params',
+            body_params => {
+                'param1' => 'foo',
+            },
+        }),
+        handle('body_req', POST => {
+            class => 'TestAction::Simple',
+            view => { ok => 'raw' },
+            call => 'run_params',
+            body_params => {
+                'param1' => '!foo',
+            },
+        }),
+        handle('body_list', POST => {
+            class => 'TestAction::Simple',
+            view => { ok => 'raw' },
+            call => 'run_params',
+            body_params => {
+                'param1' => '@foo',
+            },
+        }),
+    ),
     under('bar',
         handle('baz', GET => {
             class => 'TestAction::Simple',
@@ -82,21 +141,37 @@ my $app = webactions(
 )->to_psgi;
 
 my $_wrap = sub {
-    my ($path, $code) = @_;
+    my ($path, $code, $method) = @_;
     return sub {
         my @args = @_;
-        subtest "path: $path", sub {
+        subtest "request $method $path", sub {
             $code->(@args);
             done_testing;
         };
     };
 };
 
+sub REQUEST {
+    my ($method, $path, $code) = @_;
+    return [
+        HTTP::Request->new($method => $_prefix . $path),
+        $_wrap->($path, $code, $method),
+    ];
+}
+
+sub POST {
+    my ($path, $params, $code) = @_;
+    return [
+        HTTP::Request::Common::POST($path, $params),
+        $_wrap->($path, $code, 'POST'),
+    ];
+}
+
 sub GET {
     my ($path, $code) = @_;
     return [
         HTTP::Request->new(GET => $_prefix . $path),
-        $_wrap->($path, $code),
+        $_wrap->($path, $code, 'GET'),
     ];
 }
 
@@ -110,7 +185,7 @@ sub OPTIONS {
                 [sort split m{\s*,\s*}, $res->header('Allow')],
                 [sort(@opt, 'OPTIONS')],
                 'available options';
-        }),
+        }, 'OPTIONS'),
     ];
 }
 
@@ -131,6 +206,16 @@ test_psgi(
         GET('/foo', sub {
             my $res = shift;
             like $res->content, qr{Foo\s+Result}, 'simple result';
+        }),
+        REQUEST(FNORD => '/foo', sub {
+            my $res = shift;
+            is $res->code, 405, 'status code';
+            like $res->content, qr{Invalid request method}i, 'message';
+        }),
+        GET('/doesnotexist', sub {
+            my $res = shift;
+            is $res->code, 404, 'status code';
+            like $res->content, qr{Resource not found}, 'message';
         }),
         GET('/', sub {
             my $res = shift;
@@ -176,6 +261,69 @@ test_psgi(
         GET('/cap-all/min', sub {
             my $res = shift;
             like $res->content, qr{rest any\s*$}, 'capture 0';
+        }),
+        ##
+        ##  parameters
+        ##
+        GET('/param/query?foo=23', sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=23}, 'query param';
+        }),
+        GET('/param/query_req?foo=23', sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=23}, 'query param';
+        }),
+        GET('/param/query_req?bar=23', sub {
+            my $res = shift;
+            is $res->code, 400, 'request fail';
+            like $res->content, qr{parameter.+foo}, 'query param';
+        }),
+        GET('/param/query_list', sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=\@$}, 'query param';
+        }),
+        GET('/param/query_list?foo=23', sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=\@23$}, 'query param';
+        }),
+        GET('/param/query_list?foo=23&foo=17', sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=\@23,17$}, 'query param';
+        }),
+        POST('/param/body', [foo => 23], sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=23}, 'query param';
+        }),
+        POST('/param/body_req', [foo => 23], sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=23}, 'query param';
+        }),
+        POST('/param/body_req', [bar => 23], sub {
+            my $res = shift;
+            is $res->code, 400, 'request fail';
+            like $res->content, qr{parameter.+foo}, 'query param';
+        }),
+        POST('/param/body_list', [], sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=\@$}, 'query param';
+        }),
+        POST('/param/body_list', [foo => 23], sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=\@23$}, 'query param';
+        }),
+        POST('/param/body_list', [foo => 23, foo => 17], sub {
+            my $res = shift;
+            is $res->code, 200, 'request ok';
+            like $res->content, qr{param1=\@23,17$}, 'query param';
         }),
     ),
 );

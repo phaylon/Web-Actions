@@ -6,7 +6,7 @@ use Web::Actions::Types qw( Value CodeRef );
 
 use namespace::clean;
 
-has code => (
+has catches => (
     is          => 'ro',
     isa         => Value,
     required    => 1,

@@ -12,7 +12,7 @@ our $VERSION = '0.000001'; # 0.0.1
 $VERSION = eval $VERSION;
 
 use Exporter 'import';
-our @EXPORT = qw( webactions handle root under view error );
+our @EXPORT = qw( webactions handle root under view except );
 
 my $_to_path_obj = sub {
     my ($str) = @_;
@@ -33,9 +33,9 @@ my $_to_action_obj = sub {
         defined($spec) ? $spec : 'undef';
 };
 
-sub error {
-    my ($code, $handler) = @_;
-    return lazy_new('Catcher', code => $code, handler => $handler);
+sub except {
+    my ($cond, $handler) = @_;
+    return lazy_new('Catcher', catches => $cond, handler => $handler);
 }
 
 sub view {
@@ -54,9 +54,18 @@ sub under {
 sub webactions {
     my @actions;
     my @views;
-    push @{ $_->$_isa('Web::Actions::View') ? \@views : \@actions }, $_
-        for @_;
-    return lazy_new('App', actions => \@actions, views => \@views);
+    my @catchers;
+    push @{
+        $_->$_isa('Web::Actions::View')         ? \@views :
+        $_->$_isa('Web::Actions::Catcher')      ? \@catchers :
+        $_->$_does('Web::Actions::Dispatching') ? \@actions :
+        confess(qq{Invalid webaction element})
+    }, $_ for @_;
+    return lazy_new('App',
+        actions => \@actions,
+        views => \@views,
+        catchers => \@catchers,
+    );
 }
 
 sub root {

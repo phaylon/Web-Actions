@@ -4,7 +4,8 @@ package Web::Actions::MethodMap;
 use Moo;
 use Web::Actions::Types qw( HTTPMethod Responding Map InstanceOf );
 use Web::Actions::Util qw( lazy_new );
-use HTTP::Throwable::Factory qw( http_throw );
+
+use aliased 'Web::Actions::Status';
 
 use namespace::clean;
 
@@ -51,9 +52,10 @@ sub dispatcher {
                 return $responder->($req, %$collected, %$extract);
             }
             else {
-                http_throw(MethodNotAllowed => {
+                die Status->new(
+                    code    => 405,
                     message => 'Invalid request method',
-                });
+                );
             }
         }
         return undef;

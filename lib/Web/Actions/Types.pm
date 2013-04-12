@@ -20,6 +20,8 @@ our @EXPORT_OK = qw(
     InstanceOf
     ClassName
     CodeRef
+    Value
+    HTTPStatusCode
 );
 
 my $_role_type = sub {
@@ -75,14 +77,27 @@ my $_tc_code_ref = sub {
         unless ref($_[0]) eq 'CODE';
 };
 
+my $_tc_value = sub {
+    die "Value needs to be defined\n"
+        unless defined $_[0];
+};
+
+my $_tc_http_status_code = sub {
+    $_tc_value->($_[0]);
+    die "Invalid HTTP status code\n"
+        unless $_[0] =~ m{^[2-5]\d\d$};
+};
+
 sub Dispatching { $_tc_dispatching }
 sub Responding { $_tc_responding }
 sub PathMatching { $_tc_path_matching }
 sub HTTPMethod { $_tc_http_method }
+sub HTTPStatusCode { $_tc_http_status_code }
 sub Str { $_tc_str }
 sub PathPartStr { $_tc_str }
 sub ClassName { $_tc_class_name }
 sub CodeRef { $_tc_code_ref }
+sub Value { $_tc_value }
 
 sub InstanceOf {
     my ($class) = @_;
