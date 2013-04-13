@@ -8,6 +8,7 @@ use Try::Tiny;
 use Carp qw( confess );
 
 use aliased 'Web::Actions::Container::Actions', 'ActionContainer';
+use aliased 'Web::Actions::Path';
 use aliased 'Web::Actions::Status';
 
 use namespace::clean;
@@ -70,7 +71,7 @@ sub view_transformer {
     my %view = map { ($_->name, $_->handler) } @{ $self->_views_ref };
     $view{__psgi} = sub { return shift };
     return sub {
-        my $res = shift;
+        my ($res, $refs) = @_;
         my ($view_name, $view_data) = @$res;
         my @view_args;
         if (ref($view_name) eq 'ARRAY') {
@@ -80,8 +81,44 @@ sub view_transformer {
             unless defined $view_name;
         my $handler = $view{$view_name}
             or confess qq{Unknown view '$view_name'};
-        my $final = $handler->($view_data, @view_args);
+        my $final = $handler->($view_data, $refs, @view_args);
         return $final;
+    };
+}
+
+sub reference_resolver {
+    my ($self) = @_;
+    my %seen;
+    my %by_id;
+    $self->actions->traverse(sub {
+        my ($path, $action, $method) = @_;
+        if (defined( my $id = $action->id )) {
+            confess sprintf
+                    q{Action ID not unique '%s' at:\n\t%s\n\t%s\n},
+                    $id,
+                    $path->stringify,
+                    $seen{$id}->[0]->stringify,
+                if exists $seen{$id};
+            $seen{$id} = [
+                $path,
+                $method,
+                $by_id{$id} = $action->reference_builder($method, $path),
+            ];
+        }
+    }, Path->new);
+    return sub {
+        my ($req, $res) = @_;
+        my $action_ref_spec = $res->[2] || {};
+        return +{
+            (map {
+                my $name = $_;
+                my $spec = $action_ref_spec->{$_};
+                my $id = $spec->{id}
+                    or confess "Missing reference ID for link '$name'";
+                my $builder = $by_id{$id};
+                ($name, $builder->($req, %{ $spec->{curry} || {} }));
+            } keys %$action_ref_spec),
+        };
     };
 }
 
@@ -90,6 +127,7 @@ sub _build_dispatcher {
     my $action_dispatch = $self->actions->dispatcher;
     my $view_transform = $self->view_transformer;
     my $exception_handler = $self->exception_handler;
+    my $ref_resolver = $self->reference_resolver;
     return sub {
         my ($env) = @_;
         try {
@@ -98,7 +136,8 @@ sub _build_dispatcher {
             $path_info =~ s{^/+}{};
             my @path = grep length, split m{/+}, $path_info;
             if (my $res = $action_dispatch->([@path], $req, {})) {
-                return $res->$view_transform;
+                my $refs = $ref_resolver->($req, $res);
+                return $res->$view_transform($refs);
             }
             die Status->new(
                 code    => 404,

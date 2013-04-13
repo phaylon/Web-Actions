@@ -14,6 +14,8 @@ has prefix => (is => 'ro');
 has param1 => (is => 'ro');
 has param2 => (is => 'ro');
 
+sub rest_list { @{ $_[0]->rest || [] } }
+
 sub run {
     my ($self) = @_;
     return $self->text || 'Foo Result';

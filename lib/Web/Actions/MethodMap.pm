@@ -28,6 +28,14 @@ sub methods { sort keys %{ $_[0]->_method_map } }
 sub actions { map $_[0]->_method_map->{$_}, $_[0]->methods }
 sub has_actions { scalar keys %{ $_[0]->_method_map } }
 
+sub traverse {
+    my ($self, $callback, $parent_path) = @_;
+    my $path = $parent_path->append($self->path);
+    $self->action_for_method($_)->traverse($callback, $path, $_)
+        for $self->methods;
+    return 1;
+}
+
 sub dispatcher {
     my ($self) = @_;
     my $path_matcher = $self->path->end_matcher;

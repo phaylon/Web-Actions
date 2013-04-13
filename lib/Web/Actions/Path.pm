@@ -22,6 +22,20 @@ sub has_parts { scalar $_[0]->parts }
 
 my $_rx_ident = qr{(?:[a-zA-Z_][a-zA-Z0-9_]*)};
 
+sub stringify {
+    my ($self) = @_;
+    return sprintf '/%s', join '/', map $_->stringify, $self->parts;
+}
+
+sub make_builder {
+    my ($self) = @_;
+    my @part_builders = map $_->make_builder, $self->parts;
+    return sub {
+        my $ref = shift;
+        return join '/', map $_->($ref), @part_builders;
+    };
+}
+
 sub from_string {
     my ($class, $str) = @_;
     my @parts = map {

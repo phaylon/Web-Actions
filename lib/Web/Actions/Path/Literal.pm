@@ -12,6 +12,17 @@ has value => (
     required    => 1,
 );
 
+sub stringify {
+    my ($self) = @_;
+    return $self->value;
+}
+
+sub make_builder {
+    my ($self) = @_;
+    my $value = $self->value;
+    return sub { $value };
+}
+
 sub matcher {
     my ($self) = @_;
     my $value = $self->value;

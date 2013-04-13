@@ -14,6 +14,18 @@ my $app = webactions(
         my $res = shift;
         return [200, ['Content-Type', 'text/html'], [$res]];
     }),
+    view(raw_ref_uris => sub {
+        my ($res, $refs) = @_;
+        return [
+            200,
+            [],
+            [join "\n", map {
+                my $ref_name = $_;
+                my $ref_obj = $refs->{$ref_name};
+                join ' ', $ref_name, $ref_obj->uri;
+            } sort keys %$refs],
+        ];
+    }),
     except('Web::Actions::Status', sub {
         my $err = shift;
         return [
@@ -23,11 +35,13 @@ my $app = webactions(
         ];
     }),
     handle('foo', GET => {
+        id => 'simple',
         class => 'TestAction::Simple',
         view => { ok => 'raw' },
     }),
     under('param',
         handle('query', GET => {
+            id => 'query',
             class => 'TestAction::Simple',
             view => { ok => 'raw' },
             call => 'run_params',
@@ -44,6 +58,7 @@ my $app = webactions(
             },
         }),
         handle('query_list', GET => {
+            id => 'query_list',
             class => 'TestAction::Simple',
             view => { ok => 'raw' },
             call => 'run_params',
@@ -52,6 +67,7 @@ my $app = webactions(
             },
         }),
         handle('body', POST => {
+            id => 'body',
             class => 'TestAction::Simple',
             view => { ok => 'raw' },
             call => 'run_params',
@@ -114,6 +130,7 @@ my $app = webactions(
                 call => 'run_rest',
             }),
             handle(':rest*', GET => {
+                id => 'capture_all',
                 class => 'TestAction::Simple',
                 view => { ok => 'raw' },
                 static => { prefix => 'any ' },
@@ -122,6 +139,7 @@ my $app = webactions(
         ),
     ),
     handle('cap/:capture', GET => {
+        id => 'capture',
         class => 'TestAction::Simple',
         view => { ok => 'raw' },
         call => 'run_capture',
@@ -131,6 +149,32 @@ my $app = webactions(
             class => 'TestAction::Simple',
             view => { ok => 'raw' },
             call => 'run_all_captures',
+        }),
+    ),
+    under('refs',
+        handle('simple', GET => {
+            class => 'TestAction::Simple',
+            view => { ok => 'raw_ref_uris' },
+            static => { text => 'foobar', rest => [1..3] },
+            refers => {
+                link_simple => 'simple',
+                link_capture => {
+                    id => 'capture',
+                    curry => { capture => 'text' },
+                },
+                link_capture_all => {
+                    id => 'capture_all',
+                    curry => { rest => 'rest_list' },
+                },
+                link_query => {
+                    id => 'query',
+                    curry => { param1 => 'text' },
+                },
+                link_query_list => {
+                    id => 'query_list',
+                    curry => { param1 => 'rest_list' },
+                },
+            },
         }),
     ),
     root(GET => {
@@ -324,6 +368,29 @@ test_psgi(
             my $res = shift;
             is $res->code, 200, 'request ok';
             like $res->content, qr{param1=\@23,17$}, 'query param';
+        }),
+        ##
+        ##  references
+        ##
+        GET('/refs/simple', sub {
+            my $res = shift;
+            my $base = 'http://localhost';
+            is $res->code, 200, 'request ok'
+                or diag($res->content);
+            my @lines = grep length, split m{\n}, $res->content;
+            is $lines[0], "link_capture $base/cap/foobar",
+                'capture';
+            is $lines[1],
+                "link_capture_all $base/cap-all/min/1/2/3",
+                'capture all';
+            is $lines[2],
+                "link_query $base/param/query?foo=foobar",
+                'query';
+            is $lines[3],
+                "link_query_list $base/param/query_list?foo=1&foo=2&foo=3",
+                'query list';
+            is $lines[4], "link_simple $base/foo",
+                'simple';
         }),
     ),
 );

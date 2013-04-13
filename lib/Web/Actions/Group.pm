@@ -21,6 +21,12 @@ has actions => (
     default     => sub { ActionContainer->new },
 );
 
+sub traverse {
+    my ($self, $callback, $parent_path) = @_;
+    my $path = $parent_path->append($self->path);
+    return $self->actions->traverse($callback, $path);
+}
+
 sub dispatcher {
     my ($self) = @_;
     my $path_matcher = $self->path->matcher;
